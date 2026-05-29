@@ -36,6 +36,17 @@ void DisposeSpriteAnimation(SpriteAnimation animation)
 	free(animation.rectangles);
 }
 
+void ResetSpriteAnimation(SpriteAnimation* animation)
+{
+	animation->timeStarted = GetTime();
+}
+
+int IsSpriteAnimationFinished(SpriteAnimation animation)
+{
+	int index = (int)((GetTime() - animation.timeStarted) * animation.framesPerSecond);
+	return index >= animation.rectanglesLength;
+}
+
 void DrawSpriteAnimationPro(SpriteAnimation animation, Rectangle dest, Vector2 origin, float rotation, Color tint)
 {
 	int index = (int)((GetTime() - animation.timeStarted) * animation.framesPerSecond) % animation.rectanglesLength;

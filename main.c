@@ -10,20 +10,26 @@ void reload(int *bulletCount, Sound reloadSound) {
     PlaySound(reloadSound);
 }
 
-void characterControl(Vector2 *playerPos) {
+int characterControl(Vector2 *playerPos) {
     // Character Control
+    int isMoving = 0;
     if (IsKeyDown(KEY_W)) {
-        playerPos->y -= 5; // The arrow operator is equivalent to (*playerPos).y -= 5;
+        playerPos->y -= 5;
+        isMoving = 1;
     }
     if (IsKeyDown(KEY_S)) {  
         playerPos->y += 5;
+        isMoving = 1;
     }
     if (IsKeyDown(KEY_A)) {
         playerPos->x -= 5;
+        isMoving = 1;
     }
     if (IsKeyDown(KEY_D)) {
         playerPos->x += 5;
+        isMoving = 1;
     }
+    return isMoving;
 }
 
 int main(void)
@@ -81,16 +87,16 @@ int main(void)
 		(Rectangle){896, 0, 128, 128},
 		(Rectangle){1024, 0, 128, 128},
 		(Rectangle){1152, 0, 128, 128},
-		(Rectangle){1280, 0, 128, 128},
-		(Rectangle){1408, 0, 128, 128},
-		(Rectangle){1536, 0, 128, 128},
-		(Rectangle){1664, 0, 128, 128},
-		(Rectangle){1792, 0, 128, 128},
-		(Rectangle){1920, 0, 128, 128},
-		(Rectangle){2048, 0, 128, 128},
-	}, 17);
+	}, 10);
 
-    SpriteAnimation _playerDeadAnimation = CreateSpriteAnimation(playerDeadTexture, 22, (Rectangle[]) {
+    SpriteAnimation _playerShotAnimation = CreateSpriteAnimation(playerShotTexture, 25, (Rectangle[]) {
+		(Rectangle){0, 0, 128, 128},
+		(Rectangle){128, 0, 128, 128},
+		(Rectangle){256, 0, 128, 128},
+		(Rectangle){384, 0, 128, 128},
+	}, 4);
+
+    SpriteAnimation _playerDeadAnimation = CreateSpriteAnimation(playerDeadTexture, 8, (Rectangle[]) {
 		(Rectangle){0, 0, 128, 128},
 		(Rectangle){128, 0, 128, 128},
 		(Rectangle){256, 0, 128, 128},
@@ -99,9 +105,7 @@ int main(void)
 		(Rectangle){640, 0, 128, 128},
 		(Rectangle){768, 0, 128, 128},
 		(Rectangle){896, 0, 128, 128},
-		(Rectangle){1024, 0, 128, 128},
-		(Rectangle){1152, 0, 128, 128},
-	}, 17);
+	}, 8);
 
     //audio
     Sound fireSound = LoadSound("assets/sounds/gun_fire.wav");
@@ -124,11 +128,15 @@ int main(void)
     SetTargetFPS(60);
     reload(&bulletCount, reloadSound);
     
+    // State tracking: 0 = idle, 1 = running, 2 = shooting, 3 = reloading, 4 = dead
+    int playerState = 0;
+    int lastState = -1;
+    
     while (!WindowShouldClose())
     {   
         Vector2 mousePos = GetMousePosition();
         
-        BeginDrawing();
+        ClearBackground(DARKGRAY);
 
         if (!IsAudioDeviceReady()) {
             DrawText("Audio device failed!", 100, 100, 20, RED);
@@ -138,35 +146,45 @@ int main(void)
             DrawText("Sound failed to load!", 100, 130, 20, RED);
         }
 
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            printf("LEFT click detected\n Reloading sound...\n");
-            
-            reload(&bulletCount, reloadSound);
-        }
-        
-        if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
-            printf("RIGHT click detected\n Firing...\n");
-            if (bulletCount > 0) {
-                bulletCount -= 1;
-                PlaySound(fireSound);
-                
-                Rectangle playerTextureDest = (Rectangle){(int)playerPos.x, (int)playerPos.y, 128, 128};
-                
-                Vector2 origin = { 0 };
-                DrawSpriteAnimationPro(_playerRunAnimation, playerTextureDest, origin, 0, WHITE);
-
-            } else {
-                reload(&bulletCount, reloadSound);
+        // Reset animation when entering a new state
+        if (playerState != lastState) {
+            lastState = playerState;
+            if (playerState == 2) {
+                ResetSpriteAnimation(&_playerShotAnimation);
+            } else if (playerState == 3) {
+                ResetSpriteAnimation(&_playerReloadAnimation);
             }
         }
 
-        
-
-        ClearBackground(DARKGRAY);
-
-        // Character Control
-        characterControl(&playerPos);
-
+        // Handle state transitions
+        if (playerState == 2 && IsSpriteAnimationFinished(_playerShotAnimation)) {
+            // Shooting finished, go back to idle
+            playerState = 0;
+            lastState = -1;
+        } else if (playerState == 3 && IsSpriteAnimationFinished(_playerReloadAnimation)) {
+            // Reloading finished, go back to idle
+            playerState = 0;
+            lastState = -1;
+        } else if (playerState != 2 && playerState != 3) {
+            // Only update state if not in shooting or reloading animation
+            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                playerState = 3;  // Reloading
+                reload(&bulletCount, reloadSound);
+            } else if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+                if (bulletCount > 0) {
+                    playerState = 2;  // Shooting
+                    bulletCount -= 1;
+                    PlaySound(fireSound);
+                } else {
+                    playerState = 3;  // Reloading
+                    reload(&bulletCount, reloadSound);
+                }
+            } else if (characterControl(&playerPos)) {
+                playerState = 1;  // Running
+            } else {
+                playerState = 0;  // Idle
+            }
+        }
 
         // enemy movement
         if (enemyPos.x > playerPos.x) {
@@ -182,20 +200,42 @@ int main(void)
             enemyPos.y += enemySpeed;
         }
 
-
         Rectangle playerTextureDest = (Rectangle){(int)playerPos.x, (int)playerPos.y, 128, 128};
         Vector2 origin = { 0 };
- 
 
+        BeginDrawing();
+
+        // Draw based on current state
+        switch (playerState) {
+            case 0:  // Idle
+                DrawSpriteAnimationPro(_playerIdleAnimation, playerTextureDest, origin, 0, WHITE);
+                break;
+            case 1:  // Running
+                DrawSpriteAnimationPro(_playerRunAnimation, playerTextureDest, origin, 0, WHITE);
+                break;
+            case 2:  // Shooting
+                DrawSpriteAnimationPro(_playerShotAnimation, playerTextureDest, origin, 0, WHITE);
+                break;
+            case 3:  // Reloading
+                DrawSpriteAnimationPro(_playerReloadAnimation, playerTextureDest, origin, 0, WHITE);
+                break;
+            case 4:  // Dead
+                DrawSpriteAnimationPro(_playerDeadAnimation, playerTextureDest, origin, 0, WHITE);
+                break;
+        }
         
         // Draw enemy
         DrawTexture(enemy, (int)enemyPos.x, (int)enemyPos.y, WHITE);
-        // Drawinng Mouse cursor is nessary just before EndDrawing() for overlapping issues
+        // Drawing Mouse cursor is necessary just before EndDrawing() for overlapping issues
         DrawTexture(customMouse, (int)mousePos.x, (int)mousePos.y, WHITE);
         EndDrawing();
     }
     
     DisposeSpriteAnimation(_playerIdleAnimation);
+    DisposeSpriteAnimation(_playerRunAnimation);
+    DisposeSpriteAnimation(_playerReloadAnimation);
+    DisposeSpriteAnimation(_playerShotAnimation);
+    DisposeSpriteAnimation(_playerDeadAnimation);
     
     
     UnloadSound(fireSound);
