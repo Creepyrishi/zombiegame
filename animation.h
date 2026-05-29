@@ -20,4 +20,12 @@ int IsSpriteAnimationFinished(SpriteAnimation animation);
 
 void DrawSpriteAnimationPro(SpriteAnimation animation, Rectangle dest, Vector2 origin, float rotation, Color tint);
 
+SpriteAnimation CreateSpriteAnimationStrip(
+    Texture2D atlas,
+    int framesPerSecond,
+    int frameWidth,
+    int frameHeight,
+    int frameCount
+);
+
 #endif

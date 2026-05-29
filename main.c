@@ -1,258 +1,484 @@
 #include "raylib.h"
 #include "animation.h"
-#include <complex.h>
-#include <stdatomic.h>
+
 #include <stdio.h>
 
+typedef enum PlayerDirection
+{
+    DIR_DOWN,
+    DIR_UP,
+    DIR_LEFT,
+    DIR_RIGHT
+} PlayerDirection;
 
-void reload(int *bulletCount, Sound reloadSound) {
+typedef enum PlayerState
+{
+    PLAYER_IDLE,
+    PLAYER_RUNNING,
+    PLAYER_SHOOTING,
+    PLAYER_RELOADING,
+    PLAYER_DEAD
+} PlayerState;
+
+void reload(int *bulletCount, Sound reloadSound)
+{
     *bulletCount = 10;
     PlaySound(reloadSound);
 }
 
-int characterControl(Vector2 *playerPos) {
-    // Character Control
+int characterControl(Vector2 *playerPos, PlayerDirection *direction)
+{
     int isMoving = 0;
-    if (IsKeyDown(KEY_W)) {
+
+    if (IsKeyDown(KEY_W))
+    {
         playerPos->y -= 5;
+        *direction = DIR_UP;
         isMoving = 1;
     }
-    if (IsKeyDown(KEY_S)) {  
+
+    if (IsKeyDown(KEY_S))
+    {
         playerPos->y += 5;
+        *direction = DIR_DOWN;
         isMoving = 1;
     }
-    if (IsKeyDown(KEY_A)) {
+
+    if (IsKeyDown(KEY_A))
+    {
         playerPos->x -= 5;
+        *direction = DIR_LEFT;
         isMoving = 1;
     }
-    if (IsKeyDown(KEY_D)) {
+
+    if (IsKeyDown(KEY_D))
+    {
         playerPos->x += 5;
+        *direction = DIR_RIGHT;
         isMoving = 1;
     }
+
     return isMoving;
+}
+
+SpriteAnimation *GetRunAnimation(
+    PlayerDirection direction,
+    SpriteAnimation *up,
+    SpriteAnimation *down,
+    SpriteAnimation *left,
+    SpriteAnimation *right
+)
+{
+    switch (direction)
+    {
+        case DIR_UP:
+            return up;
+
+        case DIR_DOWN:
+            return down;
+
+        case DIR_LEFT:
+            return left;
+
+        case DIR_RIGHT:
+            return right;
+
+        default:
+            return down;
+    }
+}
+
+SpriteAnimation *GetShootAnimation(
+    PlayerDirection direction,
+    SpriteAnimation *up,
+    SpriteAnimation *down,
+    SpriteAnimation *left,
+    SpriteAnimation *right
+)
+{
+    switch (direction)
+    {
+        case DIR_UP:
+            return up;
+
+        case DIR_DOWN:
+            return down;
+
+        case DIR_LEFT:
+            return left;
+
+        case DIR_RIGHT:
+            return right;
+
+        default:
+            return down;
+    }
 }
 
 int main(void)
 {
     InitWindow(800, 450, "Dungeon Of Jhur");
     HideCursor();
+
     InitAudioDevice();
     printf("Audio device ready: %d\n", IsAudioDeviceReady());
-    
+
     Texture2D customMouse = LoadTexture("assets/sprites/cursor.png");
-    Texture2D enemy = LoadTexture("assets/sprites/enemy/Zombie Woman/test.png");
 
     // Player Sprites
-    Texture2D playerIdleTexture = LoadTexture("assets/sprites/character/Idle_2.png");
-    Texture2D playerRunTexture = LoadTexture("assets/sprites/character/Run.png");
-    Texture2D playerDeadTexture = LoadTexture("assets/sprites/character/Dead.png");
-    Texture2D playerShotTexture = LoadTexture("assets/sprites/character/Shot.png");
-    Texture2D playerReloadTexture = LoadTexture("assets/sprites/character/Recharge.png");
+    Texture2D playerIdleTexture = LoadTexture("assets/sprites/Player/Idle.png");
 
-    // Player sprite animation
-    SpriteAnimation _playerIdleAnimation = CreateSpriteAnimation(playerIdleTexture, 9, (Rectangle[]) {
-		(Rectangle){0, 0, 128, 128},
-		(Rectangle){128, 0, 128, 128},
-		(Rectangle){256, 0, 128, 128},
-		(Rectangle){384, 0, 128, 128},
-		(Rectangle){512, 0, 128, 128},
-		(Rectangle){640, 0, 128, 128},
-		(Rectangle){768, 0, 128, 128},
-		(Rectangle){896, 0, 128, 128},
-		(Rectangle){1024, 0, 128, 128},
-		(Rectangle){1152, 0, 128, 128},
-	}, 10);
+    Texture2D playerRunUPTexture = LoadTexture("assets/sprites/Player/Run/up.png");
+    Texture2D playerRunDOWNTexture = LoadTexture("assets/sprites/Player/Run/down.png");
+    Texture2D playerRunLEFTTexture = LoadTexture("assets/sprites/Player/Run/left.png");
+    Texture2D playerRunRIGHTTexture = LoadTexture("assets/sprites/Player/Run/right.png");
 
-    SpriteAnimation _playerRunAnimation = CreateSpriteAnimation(playerRunTexture, 14, (Rectangle[]) {
-		(Rectangle){0, 0, 128, 128},
-		(Rectangle){128, 0, 128, 128},
-		(Rectangle){256, 0, 128, 128},
-		(Rectangle){384, 0, 128, 128},
-		(Rectangle){512, 0, 128, 128},
-		(Rectangle){640, 0, 128, 128},
-		(Rectangle){768, 0, 128, 128},
-		(Rectangle){896, 0, 128, 128},
-		(Rectangle){1024, 0, 128, 128},
-		(Rectangle){1152, 0, 128, 128},
-	}, 10);
+    Texture2D playerShotUPTexture = LoadTexture("assets/sprites/Player/Shot/up.png");
+    Texture2D playerShotDOWNTexture = LoadTexture("assets/sprites/Player/Shot/down.png");
+    Texture2D playerShotLEFTTexture = LoadTexture("assets/sprites/Player/Shot/left.png");
+    Texture2D playerShotRIGHTTexture = LoadTexture("assets/sprites/Player/Shot/right.png");
 
-    SpriteAnimation _playerReloadAnimation = CreateSpriteAnimation(playerReloadTexture, 15, (Rectangle[]) {
-		(Rectangle){0, 0, 128, 128},
-		(Rectangle){128, 0, 128, 128},
-		(Rectangle){256, 0, 128, 128},
-		(Rectangle){384, 0, 128, 128},
-		(Rectangle){512, 0, 128, 128},
-		(Rectangle){640, 0, 128, 128},
-		(Rectangle){768, 0, 128, 128},
-		(Rectangle){896, 0, 128, 128},
-		(Rectangle){1024, 0, 128, 128},
-		(Rectangle){1152, 0, 128, 128},
-	}, 10);
+    // Zombie Woman Sprites
+    Texture2D zombieWomanIdleTexture = LoadTexture("assets/sprites/enemy/Zombie Woman/Idle.png");
+    Texture2D zombieWomanWalkTexture = LoadTexture("assets/sprites/enemy/Zombie Woman/Walk.png");
+    Texture2D zombieWomanRunTexture = LoadTexture("assets/sprites/enemy/Zombie Woman/Run.png");
+    Texture2D zombieWomanDeadTexture = LoadTexture("assets/sprites/enemy/Zombie Woman/Dead.png");
+    Texture2D zombieWomanAttackTexture = LoadTexture("assets/sprites/enemy/Zombie Woman/Attack_2.png");
 
-    SpriteAnimation _playerShotAnimation = CreateSpriteAnimation(playerShotTexture, 25, (Rectangle[]) {
-		(Rectangle){0, 0, 128, 128},
-		(Rectangle){128, 0, 128, 128},
-		(Rectangle){256, 0, 128, 128},
-		(Rectangle){384, 0, 128, 128},
-	}, 4);
+    // Player animations
+    SpriteAnimation _playerIdleAnimation =
+        CreateSpriteAnimationStrip(playerIdleTexture, 12, 254, 254, 1);
 
-    SpriteAnimation _playerDeadAnimation = CreateSpriteAnimation(playerDeadTexture, 8, (Rectangle[]) {
-		(Rectangle){0, 0, 128, 128},
-		(Rectangle){128, 0, 128, 128},
-		(Rectangle){256, 0, 128, 128},
-		(Rectangle){384, 0, 128, 128},
-		(Rectangle){512, 0, 128, 128},
-		(Rectangle){640, 0, 128, 128},
-		(Rectangle){768, 0, 128, 128},
-		(Rectangle){896, 0, 128, 128},
-	}, 8);
+    SpriteAnimation _playerRunUPAnimation =
+        CreateSpriteAnimationStrip(playerRunUPTexture, 12, 254, 254, 24);
 
-    //audio
+    SpriteAnimation _playerRunDOWNAnimation =
+        CreateSpriteAnimationStrip(playerRunDOWNTexture, 12, 254, 254, 24);
+
+    SpriteAnimation _playerRunLEFTAnimation =
+        CreateSpriteAnimationStrip(playerRunLEFTTexture, 12, 254, 254, 24);
+
+    SpriteAnimation _playerRunRIGHTAnimation =
+        CreateSpriteAnimationStrip(playerRunRIGHTTexture, 12, 254, 254, 24);
+
+    SpriteAnimation _playerShootUPAnimation =
+        CreateSpriteAnimationStrip(playerShotUPTexture, 60, 254, 254, 10);
+
+    SpriteAnimation _playerShootDOWNAnimation =
+        CreateSpriteAnimationStrip(playerShotDOWNTexture, 60, 254, 254, 10);
+
+    SpriteAnimation _playerShootLEFTAnimation =
+        CreateSpriteAnimationStrip(playerShotLEFTTexture, 60, 254, 254, 10);
+
+    SpriteAnimation _playerShootRIGHTAnimation =
+        CreateSpriteAnimationStrip(playerShotRIGHTTexture, 60, 254, 254, 10);
+
+    // Zombie animations
+    SpriteAnimation _zombieWomanIdleAnimation =
+        CreateSpriteAnimationStrip(zombieWomanIdleTexture, 8, 96, 96, 5);
+
+    SpriteAnimation _zombieWomanWalkAnimation =
+        CreateSpriteAnimationStrip(zombieWomanWalkTexture, 8, 96, 96, 6);
+
+    SpriteAnimation _zombieWomanRunAnimation =
+        CreateSpriteAnimationStrip(zombieWomanRunTexture, 12, 96, 96, 8);
+
+    SpriteAnimation _zombieWomanDeadAnimation =
+        CreateSpriteAnimationStrip(zombieWomanDeadTexture, 8, 96, 96, 5);
+
+    SpriteAnimation _zombieWomanAttackAnimation =
+        CreateSpriteAnimationStrip(zombieWomanAttackTexture, 10, 96, 96, 4);
+
+    // Audio
     Sound fireSound = LoadSound("assets/sounds/gun_fire.wav");
     Sound reloadSound = LoadSound("assets/sounds/reload.wav");
     Sound bgZombie = LoadSound("assets/sounds/bg_zombie.wav");
     Sound playerDeath = LoadSound("assets/sounds/emotional_damage.wav");
     Sound enemyDeath = LoadSound("assets/sounds/enemy_death.wav");
     Sound enemySpawn = LoadSound("assets/sounds/enemy_spwan.wav");
-    
-    
-    // Initialize positions
-    Vector2 playerPos = {50, 50};
-    Vector2 enemyPos = {60, 50};
 
-    float enemySpeed = 2.5;
-    
+    // Positions
+    Vector2 playerPos = { 50, 50 };
+    Vector2 enemyPos = { 300, 200 };
+
+    float enemySpeed = 2.5f;
+
     int playerHealth = 100;
     int bulletCount = 0;
 
+    PlayerState playerState = PLAYER_IDLE;
+    PlayerDirection playerDirection = DIR_DOWN;
+
     SetTargetFPS(60);
+
     reload(&bulletCount, reloadSound);
-    
-    // State tracking: 0 = idle, 1 = running, 2 = shooting, 3 = reloading, 4 = dead
-    int playerState = 0;
-    int lastState = -1;
-    
+
     while (!WindowShouldClose())
-    {   
+    {
         Vector2 mousePos = GetMousePosition();
-        
-        ClearBackground(DARKGRAY);
 
-        if (!IsAudioDeviceReady()) {
-            DrawText("Audio device failed!", 100, 100, 20, RED);
-        }
+        // If player is shooting, wait until shooting animation finishes
+        if (playerState == PLAYER_SHOOTING)
+        {
+            SpriteAnimation *currentShootAnimation = GetShootAnimation(
+                playerDirection,
+                &_playerShootUPAnimation,
+                &_playerShootDOWNAnimation,
+                &_playerShootLEFTAnimation,
+                &_playerShootRIGHTAnimation
+            );
 
-        if (fireSound.frameCount == 0) {
-            DrawText("Sound failed to load!", 100, 130, 20, RED);
-        }
-
-        // Reset animation when entering a new state
-        if (playerState != lastState) {
-            lastState = playerState;
-            if (playerState == 2) {
-                ResetSpriteAnimation(&_playerShotAnimation);
-            } else if (playerState == 3) {
-                ResetSpriteAnimation(&_playerReloadAnimation);
+            if (IsSpriteAnimationFinished(*currentShootAnimation))
+            {
+                playerState = PLAYER_IDLE;
             }
         }
+        else if (playerState != PLAYER_DEAD)
+        {
+            int isMoving = characterControl(&playerPos, &playerDirection);
 
-        // Handle state transitions
-        if (playerState == 2 && IsSpriteAnimationFinished(_playerShotAnimation)) {
-            // Shooting finished, go back to idle
-            playerState = 0;
-            lastState = -1;
-        } else if (playerState == 3 && IsSpriteAnimationFinished(_playerReloadAnimation)) {
-            // Reloading finished, go back to idle
-            playerState = 0;
-            lastState = -1;
-        } else if (playerState != 2 && playerState != 3) {
-            // Only update state if not in shooting or reloading animation
-            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                playerState = 3;  // Reloading
+            // Left mouse reloads
+            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+            {
+                playerState = PLAYER_RELOADING;
                 reload(&bulletCount, reloadSound);
-            } else if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
-                if (bulletCount > 0) {
-                    playerState = 2;  // Shooting
-                    bulletCount -= 1;
+                playerState = PLAYER_IDLE;
+            }
+
+            // Right mouse shoots
+            else if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))
+            {
+                if (bulletCount > 0)
+                {
+                    bulletCount--;
+
+                    SpriteAnimation *currentShootAnimation = GetShootAnimation(
+                        playerDirection,
+                        &_playerShootUPAnimation,
+                        &_playerShootDOWNAnimation,
+                        &_playerShootLEFTAnimation,
+                        &_playerShootRIGHTAnimation
+                    );
+
+                    ResetSpriteAnimation(currentShootAnimation);
+
+                    playerState = PLAYER_SHOOTING;
                     PlaySound(fireSound);
-                } else {
-                    playerState = 3;  // Reloading
-                    reload(&bulletCount, reloadSound);
                 }
-            } else if (characterControl(&playerPos)) {
-                playerState = 1;  // Running
-            } else {
-                playerState = 0;  // Idle
+                else
+                {
+                    playerState = PLAYER_RELOADING;
+                    reload(&bulletCount, reloadSound);
+                    playerState = PLAYER_IDLE;
+                }
+            }
+
+            else if (isMoving)
+            {
+                playerState = PLAYER_RUNNING;
+            }
+
+            else
+            {
+                playerState = PLAYER_IDLE;
             }
         }
 
-        // enemy movement
-        if (enemyPos.x > playerPos.x) {
+        // Zombie movement toward player
+        if (enemyPos.x > playerPos.x)
+        {
             enemyPos.x -= enemySpeed;
         }
-        if (enemyPos.x < playerPos.x) {
+
+        if (enemyPos.x < playerPos.x)
+        {
             enemyPos.x += enemySpeed;
         }
-        if (enemyPos.y > playerPos.y) {
+
+        if (enemyPos.y > playerPos.y)
+        {
             enemyPos.y -= enemySpeed;
         }
-        if (enemyPos.y < playerPos.y) {
+
+        if (enemyPos.y < playerPos.y)
+        {
             enemyPos.y += enemySpeed;
         }
 
-        Rectangle playerTextureDest = (Rectangle){(int)playerPos.x, (int)playerPos.y, 128, 128};
-        Vector2 origin = { 0 };
+        Rectangle playerTextureDest = {
+            (int)playerPos.x,
+            (int)playerPos.y,
+            128,
+            128
+        };
+
+        Rectangle zombieWomanTextureDest = {
+            (int)enemyPos.x,
+            (int)enemyPos.y,
+            96,
+            96
+        };
+
+        Vector2 origin = { 0, 0 };
 
         BeginDrawing();
 
-        // Draw based on current state
-        switch (playerState) {
-            case 0:  // Idle
-                DrawSpriteAnimationPro(_playerIdleAnimation, playerTextureDest, origin, 0, WHITE);
-                break;
-            case 1:  // Running
-                DrawSpriteAnimationPro(_playerRunAnimation, playerTextureDest, origin, 0, WHITE);
-                break;
-            case 2:  // Shooting
-                DrawSpriteAnimationPro(_playerShotAnimation, playerTextureDest, origin, 0, WHITE);
-                break;
-            case 3:  // Reloading
-                DrawSpriteAnimationPro(_playerReloadAnimation, playerTextureDest, origin, 0, WHITE);
-                break;
-            case 4:  // Dead
-                DrawSpriteAnimationPro(_playerDeadAnimation, playerTextureDest, origin, 0, WHITE);
-                break;
+        ClearBackground(DARKGRAY);
+
+        if (!IsAudioDeviceReady())
+        {
+            DrawText("Audio device failed!", 100, 100, 20, RED);
         }
-        
-        // Draw enemy
-        DrawTexture(enemy, (int)enemyPos.x, (int)enemyPos.y, WHITE);
-        // Drawing Mouse cursor is necessary just before EndDrawing() for overlapping issues
+
+        if (fireSound.frameCount == 0)
+        {
+            DrawText("Sound failed to load!", 100, 130, 20, RED);
+        }
+
+        // Draw zombie as 2D animated sprite
+        DrawSpriteAnimationPro(
+            _zombieWomanWalkAnimation,
+            zombieWomanTextureDest,
+            origin,
+            0,
+            WHITE
+        );
+
+        // Draw player based on state and direction
+        switch (playerState)
+        {
+            case PLAYER_IDLE:
+            {
+                DrawSpriteAnimationPro(
+                    _playerIdleAnimation,
+                    playerTextureDest,
+                    origin,
+                    0,
+                    WHITE
+                );
+            } break;
+
+            case PLAYER_RUNNING:
+            {
+                SpriteAnimation *currentRunAnimation = GetRunAnimation(
+                    playerDirection,
+                    &_playerRunUPAnimation,
+                    &_playerRunDOWNAnimation,
+                    &_playerRunLEFTAnimation,
+                    &_playerRunRIGHTAnimation
+                );
+
+                DrawSpriteAnimationPro(
+                    *currentRunAnimation,
+                    playerTextureDest,
+                    origin,
+                    0,
+                    WHITE
+                );
+            } break;
+
+            case PLAYER_SHOOTING:
+            {
+                SpriteAnimation *currentShootAnimation = GetShootAnimation(
+                    playerDirection,
+                    &_playerShootUPAnimation,
+                    &_playerShootDOWNAnimation,
+                    &_playerShootLEFTAnimation,
+                    &_playerShootRIGHTAnimation
+                );
+
+                DrawSpriteAnimationPro(
+                    *currentShootAnimation,
+                    playerTextureDest,
+                    origin,
+                    0,
+                    WHITE
+                );
+            } break;
+
+            case PLAYER_RELOADING:
+            {
+                DrawSpriteAnimationPro(
+                    _playerIdleAnimation,
+                    playerTextureDest,
+                    origin,
+                    0,
+                    WHITE
+                );
+            } break;
+
+            case PLAYER_DEAD:
+            {
+                DrawSpriteAnimationPro(
+                    _playerIdleAnimation,
+                    playerTextureDest,
+                    origin,
+                    0,
+                    WHITE
+                );
+            } break;
+        }
+
+        DrawText(TextFormat("Bullets: %d", bulletCount), 10, 10, 20, WHITE);
+        DrawText(TextFormat("Health: %d", playerHealth), 10, 35, 20, WHITE);
+
+        // Draw mouse cursor last so it appears above everything
         DrawTexture(customMouse, (int)mousePos.x, (int)mousePos.y, WHITE);
+
         EndDrawing();
     }
-    
+
+    // Dispose player animations
     DisposeSpriteAnimation(_playerIdleAnimation);
-    DisposeSpriteAnimation(_playerRunAnimation);
-    DisposeSpriteAnimation(_playerReloadAnimation);
-    DisposeSpriteAnimation(_playerShotAnimation);
-    DisposeSpriteAnimation(_playerDeadAnimation);
-    
-    
+
+    DisposeSpriteAnimation(_playerRunUPAnimation);
+    DisposeSpriteAnimation(_playerRunDOWNAnimation);
+    DisposeSpriteAnimation(_playerRunLEFTAnimation);
+    DisposeSpriteAnimation(_playerRunRIGHTAnimation);
+
+    DisposeSpriteAnimation(_playerShootUPAnimation);
+    DisposeSpriteAnimation(_playerShootDOWNAnimation);
+    DisposeSpriteAnimation(_playerShootLEFTAnimation);
+    DisposeSpriteAnimation(_playerShootRIGHTAnimation);
+
+    // Dispose zombie animations
+    DisposeSpriteAnimation(_zombieWomanIdleAnimation);
+    DisposeSpriteAnimation(_zombieWomanWalkAnimation);
+    DisposeSpriteAnimation(_zombieWomanRunAnimation);
+    DisposeSpriteAnimation(_zombieWomanDeadAnimation);
+    DisposeSpriteAnimation(_zombieWomanAttackAnimation);
+
+    // Unload sounds
     UnloadSound(fireSound);
     UnloadSound(reloadSound);
     UnloadSound(bgZombie);
     UnloadSound(playerDeath);
     UnloadSound(enemyDeath);
     UnloadSound(enemySpawn);
+
+    // Unload textures
     UnloadTexture(customMouse);
+
     UnloadTexture(playerIdleTexture);
-    UnloadTexture(playerRunTexture);
-    UnloadTexture(playerDeadTexture);
-    UnloadTexture(playerShotTexture);
-    UnloadTexture(playerReloadTexture);
-    UnloadTexture(enemy);
-    
+
+    UnloadTexture(playerRunUPTexture);
+    UnloadTexture(playerRunDOWNTexture);
+    UnloadTexture(playerRunLEFTTexture);
+    UnloadTexture(playerRunRIGHTTexture);
+
+    UnloadTexture(playerShotUPTexture);
+    UnloadTexture(playerShotDOWNTexture);
+    UnloadTexture(playerShotLEFTTexture);
+    UnloadTexture(playerShotRIGHTTexture);
+
+    UnloadTexture(zombieWomanIdleTexture);
+    UnloadTexture(zombieWomanWalkTexture);
+    UnloadTexture(zombieWomanRunTexture);
+    UnloadTexture(zombieWomanDeadTexture);
+    UnloadTexture(zombieWomanAttackTexture);
+
     CloseAudioDevice();
     CloseWindow();
+
     return 0;
 }

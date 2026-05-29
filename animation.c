@@ -54,3 +54,47 @@ void DrawSpriteAnimationPro(SpriteAnimation animation, Rectangle dest, Vector2 o
 	Rectangle source = animation.rectangles[index];
 	DrawTexturePro(animation.atlas, source, dest, origin, rotation, tint);
 }
+
+SpriteAnimation CreateSpriteAnimationStrip(
+    Texture2D atlas,
+    int framesPerSecond,
+    int frameWidth,
+    int frameHeight,
+    int frameCount
+)
+{
+    Rectangle* rectangles = malloc(sizeof(Rectangle) * frameCount);
+
+    if (rectangles == NULL)
+    {
+        TraceLog(LOG_FATAL, "No memory for CreateSpriteAnimationStrip");
+        return (SpriteAnimation){
+            .atlas = atlas,
+            .framesPerSecond = framesPerSecond,
+            .timeStarted = GetTime(),
+            .rectangles = NULL,
+            .rectanglesLength = 0
+        };
+    }
+
+    for (int i = 0; i < frameCount; i++)
+    {
+        rectangles[i] = (Rectangle){
+            i * frameWidth,
+            0,
+            frameWidth,
+            frameHeight
+        };
+    }
+
+    SpriteAnimation animation = CreateSpriteAnimation(
+        atlas,
+        framesPerSecond,
+        rectangles,
+        frameCount
+    );
+
+    free(rectangles);
+
+    return animation;
+}
