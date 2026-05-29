@@ -1,4 +1,6 @@
 #include "raylib.h"
+#include "animation.h"
+#include <complex.h>
 #include <stdatomic.h>
 #include <stdio.h>
 
@@ -32,8 +34,74 @@ int main(void)
     printf("Audio device ready: %d\n", IsAudioDeviceReady());
     
     Texture2D customMouse = LoadTexture("assets/sprites/cursor.png");
-    Texture2D player = LoadTexture("assets/sprites/character/test.png");
     Texture2D enemy = LoadTexture("assets/sprites/enemy/Zombie Woman/test.png");
+
+    // Player Sprites
+    Texture2D playerIdleTexture = LoadTexture("assets/sprites/character/Idle_2.png");
+    Texture2D playerRunTexture = LoadTexture("assets/sprites/character/Run.png");
+    Texture2D playerDeadTexture = LoadTexture("assets/sprites/character/Dead.png");
+    Texture2D playerShotTexture = LoadTexture("assets/sprites/character/Shot.png");
+    Texture2D playerReloadTexture = LoadTexture("assets/sprites/character/Recharge.png");
+
+    // Player sprite animation
+    SpriteAnimation _playerIdleAnimation = CreateSpriteAnimation(playerIdleTexture, 9, (Rectangle[]) {
+		(Rectangle){0, 0, 128, 128},
+		(Rectangle){128, 0, 128, 128},
+		(Rectangle){256, 0, 128, 128},
+		(Rectangle){384, 0, 128, 128},
+		(Rectangle){512, 0, 128, 128},
+		(Rectangle){640, 0, 128, 128},
+		(Rectangle){768, 0, 128, 128},
+		(Rectangle){896, 0, 128, 128},
+		(Rectangle){1024, 0, 128, 128},
+		(Rectangle){1152, 0, 128, 128},
+	}, 10);
+
+    SpriteAnimation _playerRunAnimation = CreateSpriteAnimation(playerRunTexture, 14, (Rectangle[]) {
+		(Rectangle){0, 0, 128, 128},
+		(Rectangle){128, 0, 128, 128},
+		(Rectangle){256, 0, 128, 128},
+		(Rectangle){384, 0, 128, 128},
+		(Rectangle){512, 0, 128, 128},
+		(Rectangle){640, 0, 128, 128},
+		(Rectangle){768, 0, 128, 128},
+		(Rectangle){896, 0, 128, 128},
+		(Rectangle){1024, 0, 128, 128},
+		(Rectangle){1152, 0, 128, 128},
+	}, 10);
+
+    SpriteAnimation _playerReloadAnimation = CreateSpriteAnimation(playerReloadTexture, 15, (Rectangle[]) {
+		(Rectangle){0, 0, 128, 128},
+		(Rectangle){128, 0, 128, 128},
+		(Rectangle){256, 0, 128, 128},
+		(Rectangle){384, 0, 128, 128},
+		(Rectangle){512, 0, 128, 128},
+		(Rectangle){640, 0, 128, 128},
+		(Rectangle){768, 0, 128, 128},
+		(Rectangle){896, 0, 128, 128},
+		(Rectangle){1024, 0, 128, 128},
+		(Rectangle){1152, 0, 128, 128},
+		(Rectangle){1280, 0, 128, 128},
+		(Rectangle){1408, 0, 128, 128},
+		(Rectangle){1536, 0, 128, 128},
+		(Rectangle){1664, 0, 128, 128},
+		(Rectangle){1792, 0, 128, 128},
+		(Rectangle){1920, 0, 128, 128},
+		(Rectangle){2048, 0, 128, 128},
+	}, 17);
+
+    SpriteAnimation _playerDeadAnimation = CreateSpriteAnimation(playerDeadTexture, 22, (Rectangle[]) {
+		(Rectangle){0, 0, 128, 128},
+		(Rectangle){128, 0, 128, 128},
+		(Rectangle){256, 0, 128, 128},
+		(Rectangle){384, 0, 128, 128},
+		(Rectangle){512, 0, 128, 128},
+		(Rectangle){640, 0, 128, 128},
+		(Rectangle){768, 0, 128, 128},
+		(Rectangle){896, 0, 128, 128},
+		(Rectangle){1024, 0, 128, 128},
+		(Rectangle){1152, 0, 128, 128},
+	}, 17);
 
     //audio
     Sound fireSound = LoadSound("assets/sounds/gun_fire.wav");
@@ -55,7 +123,7 @@ int main(void)
 
     SetTargetFPS(60);
     reload(&bulletCount, reloadSound);
-
+    
     while (!WindowShouldClose())
     {   
         Vector2 mousePos = GetMousePosition();
@@ -72,6 +140,7 @@ int main(void)
 
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             printf("LEFT click detected\n Reloading sound...\n");
+            
             reload(&bulletCount, reloadSound);
         }
         
@@ -80,10 +149,17 @@ int main(void)
             if (bulletCount > 0) {
                 bulletCount -= 1;
                 PlaySound(fireSound);
+                
+                Rectangle playerTextureDest = (Rectangle){(int)playerPos.x, (int)playerPos.y, 128, 128};
+                
+                Vector2 origin = { 0 };
+                DrawSpriteAnimationPro(_playerRunAnimation, playerTextureDest, origin, 0, WHITE);
+
             } else {
                 reload(&bulletCount, reloadSound);
             }
         }
+
         
 
         ClearBackground(DARKGRAY);
@@ -105,21 +181,23 @@ int main(void)
         if (enemyPos.y < playerPos.y) {
             enemyPos.y += enemySpeed;
         }
-        
-        
 
-        // Draw player
-        DrawTexture(player, (int)playerPos.x, (int)playerPos.y, WHITE);
+
+        Rectangle playerTextureDest = (Rectangle){(int)playerPos.x, (int)playerPos.y, 128, 128};
+        Vector2 origin = { 0 };
+ 
+
         
         // Draw enemy
         DrawTexture(enemy, (int)enemyPos.x, (int)enemyPos.y, WHITE);
-        
         // Drawinng Mouse cursor is nessary just before EndDrawing() for overlapping issues
         DrawTexture(customMouse, (int)mousePos.x, (int)mousePos.y, WHITE);
-    
         EndDrawing();
     }
-
+    
+    DisposeSpriteAnimation(_playerIdleAnimation);
+    
+    
     UnloadSound(fireSound);
     UnloadSound(reloadSound);
     UnloadSound(bgZombie);
@@ -127,7 +205,11 @@ int main(void)
     UnloadSound(enemyDeath);
     UnloadSound(enemySpawn);
     UnloadTexture(customMouse);
-    UnloadTexture(player);
+    UnloadTexture(playerIdleTexture);
+    UnloadTexture(playerRunTexture);
+    UnloadTexture(playerDeadTexture);
+    UnloadTexture(playerShotTexture);
+    UnloadTexture(playerReloadTexture);
     UnloadTexture(enemy);
     
     CloseAudioDevice();
