@@ -1,7 +1,16 @@
 #include "raylib.h"
 #include "animation.h"
 
+#include <math.h>
 #include <stdio.h>
+
+#define SCREEN_WIDTH 800
+#define SCREEN_HEIGHT 600
+
+#define MAX_BULLETS 50
+#define BULLET_SPEED 10
+#define BULLET_RADIUS 3
+
 
 typedef enum PlayerDirection
 {
@@ -19,6 +28,41 @@ typedef enum PlayerState
     PLAYER_RELOADING,
     PLAYER_DEAD
 } PlayerState;
+
+typedef struct Bullet
+{
+    Vector2 direction;
+    float velocity;
+    Vector2 position;
+    int active;
+} Bullet;
+
+void FireBullet(Bullet bullets[], Vector2 start, Vector2 target)
+{
+    for (int i = 0; i < MAX_BULLETS; i++)
+    {
+        if (!bullets[i].active)
+        {
+            bullets[i].active = 1;
+
+            //Calculate Direction
+            Vector2 direction = {target.x - start.x, target.y - start.y};
+            float length = sqrtf(direction.x * direction.x + direction.y * direction.y);
+            direction.x /= length;
+            direction.y /= length;
+            bullets[i].direction = direction;
+
+            //Calculate Velocity
+            bullets[i].velocity = BULLET_SPEED;
+
+            //Position
+            bullets[i].position.x = start.x;
+            bullets[i].position.y = start.y;
+            
+            return;
+        }
+    }
+}
 
 void reload(int *bulletCount, Sound reloadSound)
 {
@@ -117,7 +161,7 @@ SpriteAnimation *GetShootAnimation(
 
 int main(void)
 {
-    InitWindow(800, 450, "Dungeon Of Jhur");
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Dungeon Of Solta");
     HideCursor();
 
     InitAudioDevice();
@@ -201,8 +245,8 @@ int main(void)
     Vector2 playerPos = { 50, 50 };
     Vector2 enemyPos = { 300, 200 };
 
-    float enemySpeed = 2.5f;
-
+    float enemySpeed = 1.7f;
+    Bullet bullets[MAX_BULLETS] = {0};
     int playerHealth = 100;
     int bulletCount = 0;
 
@@ -260,6 +304,10 @@ int main(void)
                         &_playerShootRIGHTAnimation
                     );
 
+                    Vector2 startBulletPos = {playerPos.x, playerPos.y};
+
+                    FireBullet(bullets, startBulletPos,  mousePos);
+                    
                     ResetSpriteAnimation(currentShootAnimation);
 
                     playerState = PLAYER_SHOOTING;
@@ -304,6 +352,7 @@ int main(void)
         {
             enemyPos.y += enemySpeed;
         }
+        
 
         Rectangle playerTextureDest = {
             (int)playerPos.x,
@@ -318,7 +367,6 @@ int main(void)
             96,
             96
         };
-
         Vector2 origin = { 0, 0 };
 
         BeginDrawing();
@@ -333,6 +381,24 @@ int main(void)
         if (fireSound.frameCount == 0)
         {
             DrawText("Sound failed to load!", 100, 130, 20, RED);
+        }
+
+        //Update Bullets and Draw
+        for (int i = 0; i < MAX_BULLETS; i++)
+        {
+            if (bullets[i].active)
+            {
+                bullets[i].position.x += bullets[i].velocity* bullets[i].direction.x;
+                bullets[i].position.y += bullets[i].velocity * bullets[i].direction.y;
+
+                DrawCircle(bullets[i].position.x, bullets[i].position.y, BULLET_RADIUS, YELLOW);
+
+                //Check if bullet is out of bounds
+                if (bullets[i].position.x < 0 || bullets[i].position.x > SCREEN_WIDTH || bullets[i].position.y < 0 || bullets[i].position.y > SCREEN_HEIGHT)
+                {
+                    bullets[i].active = 0;
+                }
+            }
         }
 
         // Draw zombie as 2D animated sprite
@@ -417,6 +483,42 @@ int main(void)
                     WHITE
                 );
             } break;
+        }
+
+        
+
+        Rectangle PlayerHitbox = {
+            playerPos.x + 50,
+            playerPos.y + 20,
+            23,
+            53
+        };
+
+        Rectangle EnemyHitbox = {
+            enemyPos.x + 30,
+            enemyPos.y + 30,
+            23,
+            53
+        };
+
+        // DrawRectangleRec(EnemyHitbox, GRAY);
+        // DrawRectangleRec(PlayerHitbox, GRAY);
+        
+        if (CheckCollisionRecs(PlayerHitbox, EnemyHitbox)) {
+            if (playerHealth > 0) {
+                playerHealth -= 3;
+            } else {
+                playerHealth = 0;
+                playerState = PLAYER_DEAD;
+            }
+        }
+
+        for (int i = 0; i < MAX_BULLETS; i++) {
+            if (bullets[i].active && CheckCollisionCircleRec(bullets[i].position, BULLET_RADIUS, EnemyHitbox)) {
+                // Do some damage to the enemy
+                playerHealth += 3;
+                bullets[i].active = 0;
+            }
         }
 
         DrawText(TextFormat("Bullets: %d", bulletCount), 10, 10, 20, WHITE);
