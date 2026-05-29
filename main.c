@@ -11,6 +11,10 @@
 #define BULLET_SPEED 10
 #define BULLET_RADIUS 3
 
+#define MAX_ENEMIES 5
+#define MIN_WAVE_ENEMIES 2
+#define MAX_WAVE_ENEMIES 5
+#define WAVE_SPAWN_DURATION 7.0f
 
 typedef enum PlayerDirection
 {
@@ -37,31 +41,123 @@ typedef struct Bullet
     int active;
 } Bullet;
 
+typedef struct Enemy
+{
+    Vector2 position;
+    int health;
+} Enemy;
+
 void FireBullet(Bullet bullets[], Vector2 start, Vector2 target)
 {
     for (int i = 0; i < MAX_BULLETS; i++)
     {
         if (!bullets[i].active)
         {
-            bullets[i].active = 1;
-
-            //Calculate Direction
-            Vector2 direction = {target.x - start.x, target.y - start.y};
+            Vector2 direction = { target.x - start.x, target.y - start.y };
             float length = sqrtf(direction.x * direction.x + direction.y * direction.y);
+
+            if (length == 0)
+            {
+                return;
+            }
+
             direction.x /= length;
             direction.y /= length;
+
+            bullets[i].active = 1;
             bullets[i].direction = direction;
-
-            //Calculate Velocity
             bullets[i].velocity = BULLET_SPEED;
+            bullets[i].position = start;
 
-            //Position
-            bullets[i].position.x = start.x;
-            bullets[i].position.y = start.y;
-            
             return;
         }
     }
+}
+
+void SpawnEnemy(Enemy enemies[], Vector2 position, int health)
+{
+    for (int i = 0; i < MAX_ENEMIES; i++)
+    {
+        if (enemies[i].health <= 0)
+        {
+            enemies[i].position = position;
+            enemies[i].health = health;
+            return;
+        }
+    }
+}
+
+void ClearEnemies(Enemy enemies[])
+{
+    for (int i = 0; i < MAX_ENEMIES; i++)
+    {
+        enemies[i].health = 0;
+    }
+}
+
+int CountAliveEnemies(Enemy enemies[])
+{
+    int count = 0;
+
+    for (int i = 0; i < MAX_ENEMIES; i++)
+    {
+        if (enemies[i].health > 0)
+        {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+void SortSpawnTimes(float spawnTimes[], int count)
+{
+    for (int i = 0; i < count - 1; i++)
+    {
+        for (int j = 0; j < count - i - 1; j++)
+        {
+            if (spawnTimes[j] > spawnTimes[j + 1])
+            {
+                float temp = spawnTimes[j];
+                spawnTimes[j] = spawnTimes[j + 1];
+                spawnTimes[j + 1] = temp;
+            }
+        }
+    }
+}
+
+void SpawnOneRandomEnemy(Enemy enemies[], int enemyHealth)
+{
+    Vector2 randomPos = {
+        GetRandomValue(0, SCREEN_WIDTH - 96),
+        GetRandomValue(0, SCREEN_HEIGHT - 96)
+    };
+
+    SpawnEnemy(enemies, randomPos, enemyHealth);
+}
+
+void PrepareEnemyWave(
+    Enemy enemies[],
+    int *waveEnemyCount,
+    int *enemiesSpawnedThisWave,
+    int *isSpawningWave,
+    float *waveSpawnTimer,
+    float spawnTimes[]
+)
+{
+    ClearEnemies(enemies);
+
+    *waveEnemyCount = GetRandomValue(MIN_WAVE_ENEMIES, MAX_WAVE_ENEMIES);
+    *enemiesSpawnedThisWave = 0;
+    *isSpawningWave = 1;
+    *waveSpawnTimer = 0.0f;
+
+    for (int i = 0; i < *waveEnemyCount; i++)
+    {
+        spawnTimes[i] = GetRandomValue(0, (int)(WAVE_SPAWN_DURATION * 100)) / 100.0f;
+    }
+
+    SortSpawnTimes(spawnTimes, *waveEnemyCount);
 }
 
 void reload(int *bulletCount, Sound reloadSound)
@@ -243,19 +339,41 @@ int main(void)
 
     // Positions
     Vector2 playerPos = { 50, 50 };
-    Vector2 enemyPos = { 300, 200 };
 
     float enemySpeed = 1.7f;
-    Bullet bullets[MAX_BULLETS] = {0};
+
+    Bullet bullets[MAX_BULLETS] = { 0 };
+    Enemy enemies[MAX_ENEMIES] = { 0 };
+
     int playerHealth = 100;
     int bulletCount = 0;
+
+    int waveNumber = 1;
+    int enemyHealthLevel = 1;
+
+    int waveEnemyCount = 0;
+    int enemiesSpawnedThisWave = 0;
+    int isSpawningWave = 0;
+    float waveSpawnTimer = 0.0f;
+    float spawnTimes[MAX_WAVE_ENEMIES] = { 0 };
 
     PlayerState playerState = PLAYER_IDLE;
     PlayerDirection playerDirection = DIR_DOWN;
 
+    Vector2 origin = { 0, 0 };
+
     SetTargetFPS(60);
 
     reload(&bulletCount, reloadSound);
+
+    PrepareEnemyWave(
+        enemies,
+        &waveEnemyCount,
+        &enemiesSpawnedThisWave,
+        &isSpawningWave,
+        &waveSpawnTimer,
+        spawnTimes
+    );
 
     while (!WindowShouldClose())
     {
@@ -304,10 +422,13 @@ int main(void)
                         &_playerShootRIGHTAnimation
                     );
 
-                    Vector2 startBulletPos = {playerPos.x, playerPos.y};
+                    Vector2 startBulletPos = {
+                        playerPos.x + 64,
+                        playerPos.y + 64
+                    };
 
-                    FireBullet(bullets, startBulletPos,  mousePos);
-                    
+                    FireBullet(bullets, startBulletPos, mousePos);
+
                     ResetSpriteAnimation(currentShootAnimation);
 
                     playerState = PLAYER_SHOOTING;
@@ -332,42 +453,172 @@ int main(void)
             }
         }
 
+        // Spawn enemies one by one within 4 seconds
+        if (playerState != PLAYER_DEAD && isSpawningWave)
+        {
+            waveSpawnTimer += GetFrameTime();
+
+            while (
+                enemiesSpawnedThisWave < waveEnemyCount &&
+                waveSpawnTimer >= spawnTimes[enemiesSpawnedThisWave]
+            )
+            {
+                SpawnOneRandomEnemy(enemies, enemyHealthLevel);
+                PlaySound(enemySpawn);
+
+                enemiesSpawnedThisWave++;
+            }
+
+            if (enemiesSpawnedThisWave >= waveEnemyCount)
+            {
+                isSpawningWave = 0;
+            }
+        }
+
         // Zombie movement toward player
-        if (enemyPos.x > playerPos.x)
+        if (playerState != PLAYER_DEAD)
         {
-            enemyPos.x -= enemySpeed;
-        }
+            for (int i = 0; i < MAX_ENEMIES; i++)
+            {
+                if (enemies[i].health > 0)
+                {
+                    if (enemies[i].position.x > playerPos.x)
+                    {
+                        enemies[i].position.x -= enemySpeed;
+                    }
 
-        if (enemyPos.x < playerPos.x)
-        {
-            enemyPos.x += enemySpeed;
-        }
+                    if (enemies[i].position.x < playerPos.x)
+                    {
+                        enemies[i].position.x += enemySpeed;
+                    }
 
-        if (enemyPos.y > playerPos.y)
-        {
-            enemyPos.y -= enemySpeed;
-        }
+                    if (enemies[i].position.y > playerPos.y)
+                    {
+                        enemies[i].position.y -= enemySpeed;
+                    }
 
-        if (enemyPos.y < playerPos.y)
-        {
-            enemyPos.y += enemySpeed;
+                    if (enemies[i].position.y < playerPos.y)
+                    {
+                        enemies[i].position.y += enemySpeed;
+                    }
+                }
+            }
         }
-        
 
         Rectangle playerTextureDest = {
-            (int)playerPos.x,
-            (int)playerPos.y,
+            playerPos.x,
+            playerPos.y,
             128,
             128
         };
 
-        Rectangle zombieWomanTextureDest = {
-            (int)enemyPos.x,
-            (int)enemyPos.y,
-            96,
-            96
+        Rectangle PlayerHitbox = {
+            playerPos.x + 50,
+            playerPos.y + 20,
+            23,
+            53
         };
-        Vector2 origin = { 0, 0 };
+
+        // Update bullets
+        for (int i = 0; i < MAX_BULLETS; i++)
+        {
+            if (bullets[i].active)
+            {
+                bullets[i].position.x += bullets[i].velocity * bullets[i].direction.x;
+                bullets[i].position.y += bullets[i].velocity * bullets[i].direction.y;
+
+                if (
+                    bullets[i].position.x < 0 ||
+                    bullets[i].position.x > SCREEN_WIDTH ||
+                    bullets[i].position.y < 0 ||
+                    bullets[i].position.y > SCREEN_HEIGHT
+                )
+                {
+                    bullets[i].active = 0;
+                }
+            }
+        }
+
+        // Player collision with enemies and bullet collision with enemies
+        if (playerState != PLAYER_DEAD)
+        {
+            for (int i = 0; i < MAX_ENEMIES; i++)
+            {
+                if (enemies[i].health > 0)
+                {
+                    Rectangle EnemyHitbox = {
+                        enemies[i].position.x + 30,
+                        enemies[i].position.y + 30,
+                        23,
+                        53
+                    };
+
+                    // Enemy touches player
+                    if (CheckCollisionRecs(PlayerHitbox, EnemyHitbox))
+                    {
+                        if (playerHealth > 0)
+                        {
+                            playerHealth -= 3;
+                        }
+
+                        if (playerHealth <= 0)
+                        {
+                            playerHealth = 0;
+                            playerState = PLAYER_DEAD;
+                            PlaySound(playerDeath);
+                        }
+                    }
+
+                    // Bullet hits enemy
+                    for (int j = 0; j < MAX_BULLETS; j++)
+                    {
+                        if (
+                            bullets[j].active &&
+                            CheckCollisionCircleRec(
+                                bullets[j].position,
+                                BULLET_RADIUS,
+                                EnemyHitbox
+                            )
+                        )
+                        {
+                            enemies[i].health -= 1;
+                            bullets[j].active = 0;
+
+                            if (enemies[i].health <= 0)
+                            {
+                                enemies[i].health = 0;
+                                PlaySound(enemyDeath);
+                            }
+
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // If all enemies are dead and the wave finished spawning, create next wave
+        if (
+            playerState != PLAYER_DEAD &&
+            !isSpawningWave &&
+            enemiesSpawnedThisWave >= waveEnemyCount &&
+            CountAliveEnemies(enemies) == 0
+        )
+        {
+            playerHealth = 100;
+
+            waveNumber++;
+            enemyHealthLevel++;
+
+            PrepareEnemyWave(
+                enemies,
+                &waveEnemyCount,
+                &enemiesSpawnedThisWave,
+                &isSpawningWave,
+                &waveSpawnTimer,
+                spawnTimes
+            );
+        }
 
         BeginDrawing();
 
@@ -383,32 +634,41 @@ int main(void)
             DrawText("Sound failed to load!", 100, 130, 20, RED);
         }
 
-        //Update Bullets and Draw
+        // Draw bullets
         for (int i = 0; i < MAX_BULLETS; i++)
         {
             if (bullets[i].active)
             {
-                bullets[i].position.x += bullets[i].velocity* bullets[i].direction.x;
-                bullets[i].position.y += bullets[i].velocity * bullets[i].direction.y;
-
-                DrawCircle(bullets[i].position.x, bullets[i].position.y, BULLET_RADIUS, YELLOW);
-
-                //Check if bullet is out of bounds
-                if (bullets[i].position.x < 0 || bullets[i].position.x > SCREEN_WIDTH || bullets[i].position.y < 0 || bullets[i].position.y > SCREEN_HEIGHT)
-                {
-                    bullets[i].active = 0;
-                }
+                DrawCircle(
+                    bullets[i].position.x,
+                    bullets[i].position.y,
+                    BULLET_RADIUS,
+                    YELLOW
+                );
             }
         }
 
-        // Draw zombie as 2D animated sprite
-        DrawSpriteAnimationPro(
-            _zombieWomanWalkAnimation,
-            zombieWomanTextureDest,
-            origin,
-            0,
-            WHITE
-        );
+        // Draw all living zombies
+        for (int i = 0; i < MAX_ENEMIES; i++)
+        {
+            if (enemies[i].health > 0)
+            {
+                Rectangle zombieWomanTextureDest = {
+                    enemies[i].position.x,
+                    enemies[i].position.y,
+                    96,
+                    96
+                };
+
+                DrawSpriteAnimationPro(
+                    _zombieWomanWalkAnimation,
+                    zombieWomanTextureDest,
+                    origin,
+                    0,
+                    WHITE
+                );
+            }
+        }
 
         // Draw player based on state and direction
         switch (playerState)
@@ -482,47 +742,14 @@ int main(void)
                     0,
                     WHITE
                 );
+
+                DrawText("YOU DIED", 300, 250, 50, RED);
             } break;
-        }
-
-        
-
-        Rectangle PlayerHitbox = {
-            playerPos.x + 50,
-            playerPos.y + 20,
-            23,
-            53
-        };
-
-        Rectangle EnemyHitbox = {
-            enemyPos.x + 30,
-            enemyPos.y + 30,
-            23,
-            53
-        };
-
-        // DrawRectangleRec(EnemyHitbox, GRAY);
-        // DrawRectangleRec(PlayerHitbox, GRAY);
-        
-        if (CheckCollisionRecs(PlayerHitbox, EnemyHitbox)) {
-            if (playerHealth > 0) {
-                playerHealth -= 3;
-            } else {
-                playerHealth = 0;
-                playerState = PLAYER_DEAD;
-            }
-        }
-
-        for (int i = 0; i < MAX_BULLETS; i++) {
-            if (bullets[i].active && CheckCollisionCircleRec(bullets[i].position, BULLET_RADIUS, EnemyHitbox)) {
-                // Do some damage to the enemy
-                playerHealth += 3;
-                bullets[i].active = 0;
-            }
         }
 
         DrawText(TextFormat("Bullets: %d", bulletCount), 10, 10, 20, WHITE);
         DrawText(TextFormat("Health: %d", playerHealth), 10, 35, 20, WHITE);
+        DrawText(TextFormat("Wave: %d", waveNumber), 10, 60, 20, WHITE);
 
         // Draw mouse cursor last so it appears above everything
         DrawTexture(customMouse, (int)mousePos.x, (int)mousePos.y, WHITE);
