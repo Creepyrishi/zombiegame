@@ -1,3 +1,5 @@
+//  gcc main.c animation.c -o game -lraylib -lGL -lm -lpthread -ldl -lrt
+
 #include "raylib.h"
 #include "animation.h"
 
@@ -11,7 +13,7 @@
 #define BULLET_SPEED 10
 #define BULLET_RADIUS 3
 
-#define ENEMY_SPEED .8f
+#define ENEMY_SPEED 1.0f
 
 #define MAX_ENEMIES 5
 #define MIN_WAVE_ENEMIES 2
@@ -39,6 +41,12 @@ typedef enum PlayerState
     PLAYER_RELOADING,
     PLAYER_DEAD
 } PlayerState;
+
+typedef enum GameScreen
+{
+    SCREEN_MAIN_MENU,
+    SCREEN_PLAYING
+} GameScreen;
 
 typedef struct Bullet
 {
@@ -360,6 +368,68 @@ SpriteAnimation *GetShootAnimation(
     }
 }
 
+void ResetGame(
+    Vector2 *playerPos,
+    Bullet bullets[],
+    Enemy enemies[],
+    int *playerHealth,
+    int *bulletCount,
+    int *waveNumber,
+    int *enemyHealthLevel,
+    int *waveEnemyCount,
+    int *enemiesSpawnedThisWave,
+    int *isSpawningWave,
+    float *waveSpawnTimer,
+    float spawnTimes[],
+    PlayerState *playerState,
+    PlayerDirection *playerDirection,
+    Sound reloadSound
+)
+{
+    *playerPos = (Vector2){ 50, 50 };
+
+    for (int i = 0; i < MAX_BULLETS; i++)
+    {
+        bullets[i].active = 0;
+        bullets[i].velocity = 0;
+        bullets[i].direction = (Vector2){ 0, 0 };
+        bullets[i].position = (Vector2){ 0, 0 };
+    }
+
+    ClearEnemies(enemies);
+
+    *playerHealth = 100;
+    *bulletCount = 0;
+    *waveNumber = 1;
+    *enemyHealthLevel = 1;
+    *playerState = PLAYER_IDLE;
+    *playerDirection = DIR_DOWN;
+
+    reload(bulletCount, reloadSound);
+
+    PrepareEnemyWave(
+        enemies,
+        waveEnemyCount,
+        enemiesSpawnedThisWave,
+        isSpawningWave,
+        waveSpawnTimer,
+        spawnTimes
+    );
+}
+
+void DrawMainMenu(Vector2 mousePos, Texture2D customMouse)
+{
+    DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.65f));
+
+    DrawText("DUNGEON OF SOLTA", 165, 65, 40, RAYWHITE);
+    DrawText("Use WASD to control", 250, 155, 24, RAYWHITE);
+    DrawText("Right click to fire", 250, 195, 24, RAYWHITE);
+    DrawText("Left click to reload", 250, 235, 24, RAYWHITE);
+    DrawText("Press T to start", 250, 305, 30, YELLOW);
+
+    DrawTexture(customMouse, (int)mousePos.x, (int)mousePos.y, WHITE);
+}
+
 int main(void)
 {
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Dungeon Of Solta");
@@ -462,26 +532,74 @@ int main(void)
 
     PlayerState playerState = PLAYER_IDLE;
     PlayerDirection playerDirection = DIR_DOWN;
+    GameScreen gameScreen = SCREEN_MAIN_MENU;
 
     Vector2 origin = { 0, 0 };
 
     SetTargetFPS(60);
 
-    reload(&bulletCount, reloadSound);
-
-    PrepareEnemyWave(
-        enemies,
-        &waveEnemyCount,
-        &enemiesSpawnedThisWave,
-        &isSpawningWave,
-        &waveSpawnTimer,
-        spawnTimes
-    );
+    ClearEnemies(enemies);
 
     while (!WindowShouldClose())
     {
         Vector2 mousePos = GetMousePosition();
         float deltaTime = GetFrameTime();
+
+        if (gameScreen == SCREEN_MAIN_MENU)
+        {
+            if (IsKeyPressed(KEY_T))
+            {
+                ResetGame(
+                    &playerPos,
+                    bullets,
+                    enemies,
+                    &playerHealth,
+                    &bulletCount,
+                    &waveNumber,
+                    &enemyHealthLevel,
+                    &waveEnemyCount,
+                    &enemiesSpawnedThisWave,
+                    &isSpawningWave,
+                    &waveSpawnTimer,
+                    spawnTimes,
+                    &playerState,
+                    &playerDirection,
+                    reloadSound
+                );
+
+                gameScreen = SCREEN_PLAYING;
+            }
+
+            BeginDrawing();
+
+            ClearBackground(DARKGRAY);
+            DrawTexture(backgroundTexture, 0, 0, WHITE);
+            DrawMainMenu(mousePos, customMouse);
+
+            EndDrawing();
+            continue;
+        }
+
+        if (playerState == PLAYER_DEAD && IsKeyPressed(KEY_T))
+        {
+            ResetGame(
+                &playerPos,
+                bullets,
+                enemies,
+                &playerHealth,
+                &bulletCount,
+                &waveNumber,
+                &enemyHealthLevel,
+                &waveEnemyCount,
+                &enemiesSpawnedThisWave,
+                &isSpawningWave,
+                &waveSpawnTimer,
+                spawnTimes,
+                &playerState,
+                &playerDirection,
+                reloadSound
+            );
+        }
 
         if (playerState == PLAYER_SHOOTING)
         {
@@ -502,13 +620,13 @@ int main(void)
         {
             int isMoving = characterControl(&playerPos, &playerDirection, walls, wallCount);
 
-            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+            if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))
             {
                 playerState = PLAYER_RELOADING;
                 reload(&bulletCount, reloadSound);
                 playerState = PLAYER_IDLE;
             }
-            else if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))
+            else if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
             {
                 if (bulletCount > 0)
                 {
@@ -897,7 +1015,8 @@ int main(void)
                     WHITE
                 );
 
-                DrawText("YOU DIED", 300, 180, 50, RED);
+                DrawText("YOU DIED", 300, 170, 50, RED);
+                DrawText("Press T to reset", 285, 235, 24, YELLOW);
             } break;
         }
 
