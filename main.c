@@ -455,7 +455,7 @@ void DrawMainMenu(Vector2 mousePos, Texture2D customMouse)
 {
     DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.65f));
 
-    DrawText("DUNGEON OF SOLTA", 165, 65, 40, RAYWHITE);
+    DrawText("SOME KIND OF GAME", 165, 65, 40, RAYWHITE);
     DrawText("Use WASD to control", 250, 155, 24, RAYWHITE);
     DrawText("Right click to fire", 250, 195, 24, RAYWHITE);
     DrawText("Left click to reload", 250, 235, 24, RAYWHITE);
@@ -466,7 +466,7 @@ void DrawMainMenu(Vector2 mousePos, Texture2D customMouse)
 
 int main(void)
 {
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Dungeon Of Solta");
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Some Kind of Game");
     HideCursor();
 
     InitAudioDevice();
