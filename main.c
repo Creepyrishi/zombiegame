@@ -25,6 +25,8 @@
 #define ENEMY_SPAWN_FRAME_COUNT 8
 #define ENEMY_SPAWN_ANIMATION_TIME 1.2f
 
+#define MAX_PARTICLES 100
+
 typedef enum PlayerDirection
 {
     DIR_DOWN,
@@ -67,6 +69,17 @@ typedef struct Enemy
 
     float spawnTimer;
 } Enemy;
+
+typedef struct
+{
+    Vector2 position;
+    Vector2 velocity;
+    float lifetime;
+    float maxLifetime;
+    float radius;
+    Color color;
+    int active;
+} Particle;
 
 Rectangle GetPlayerHitbox(Vector2 playerPos)
 {
@@ -164,6 +177,27 @@ int CountAliveEnemies(Enemy enemies[])
     }
 
     return count;
+}
+
+void SpawnHitParticles(Particle particles[], Vector2 position, int count)
+{
+    for (int i = 0; i < MAX_PARTICLES; i++)
+    {
+        if (!particles[i].active && count > 0)
+        {
+            particles[i].position = position;
+            particles[i].velocity = (Vector2){
+                GetRandomValue(-100, 100) / 50.0f,
+                GetRandomValue(-100, 100) / 50.0f
+            };
+            particles[i].maxLifetime = 0.4f;
+            particles[i].lifetime = 0.4f;
+            particles[i].radius = GetRandomValue(2, 5);
+            particles[i].color = ORANGE;
+            particles[i].active = 1;
+            count--;
+        }
+    }
 }
 
 void SortSpawnTimes(float spawnTimes[], int count)
@@ -386,7 +420,7 @@ void ResetGame(
     Sound reloadSound
 )
 {
-    *playerPos = (Vector2){ 50, 50 };
+    *playerPos = (Vector2){ 200, 200 };
 
     for (int i = 0; i < MAX_BULLETS; i++)
     {
@@ -506,17 +540,18 @@ int main(void)
     Sound enemySpawn = LoadSound("assets/sounds/enemy_spwan.wav");
 
     Rectangle walls[] = {
-        { 0, 0, SCREEN_WIDTH, 5 },
-        { 0, SCREEN_HEIGHT - 5, SCREEN_WIDTH, 5 },
-        { 0, 0, 5, SCREEN_HEIGHT },
-        { SCREEN_WIDTH - 5, 0, 5, SCREEN_HEIGHT },
+        { 0, 0, SCREEN_WIDTH, 80 }, //TOP
+        { 0, SCREEN_HEIGHT - 5, SCREEN_WIDTH, 5}, //BOTO
+        { 0, 0, 35, SCREEN_HEIGHT }, //left
+        { SCREEN_WIDTH - 5, 0, 5, SCREEN_HEIGHT }, //right
     };
     int wallCount = 4;
 
-    Vector2 playerPos = { 50, 50 };
+    Vector2 playerPos = { 200, 200 };
 
     Bullet bullets[MAX_BULLETS] = { 0 };
     Enemy enemies[MAX_ENEMIES] = { 0 };
+    Particle particles[MAX_PARTICLES] = { 0 };
 
     int playerHealth = 100;
     int bulletCount = 0;
@@ -533,6 +568,7 @@ int main(void)
     PlayerState playerState = PLAYER_IDLE;
     PlayerDirection playerDirection = DIR_DOWN;
     GameScreen gameScreen = SCREEN_MAIN_MENU;
+    float shakeIntensity = 0.0f;
 
     Vector2 origin = { 0, 0 };
 
@@ -567,6 +603,12 @@ int main(void)
                     reloadSound
                 );
 
+                for (int i = 0; i < MAX_PARTICLES; i++)
+                {
+                    particles[i].active = 0;
+                }
+                shakeIntensity = 0.0f;
+
                 gameScreen = SCREEN_PLAYING;
             }
 
@@ -599,6 +641,12 @@ int main(void)
                 &playerDirection,
                 reloadSound
             );
+
+            for (int i = 0; i < MAX_PARTICLES; i++)
+            {
+                particles[i].active = 0;
+            }
+            shakeIntensity = 0.0f;
         }
 
         if (playerState == PLAYER_SHOOTING)
@@ -651,6 +699,7 @@ int main(void)
 
                     playerState = PLAYER_SHOOTING;
                     PlaySound(fireSound);
+                    shakeIntensity = 6.0f;
                 }
                 else
                 {
@@ -742,11 +791,36 @@ int main(void)
             }
         }
 
+        for (int i = 0; i < MAX_PARTICLES; i++)
+        {
+            if (particles[i].active)
+            {
+                particles[i].position.x += particles[i].velocity.x;
+                particles[i].position.y += particles[i].velocity.y;
+                particles[i].velocity.x *= 0.9f;
+                particles[i].velocity.y *= 0.9f;
+                particles[i].lifetime -= deltaTime;
+                if (particles[i].lifetime <= 0)
+                {
+                    particles[i].active = 0;
+                }
+            }
+        }
+
+        if (shakeIntensity > 0.0f)
+        {
+            shakeIntensity *= 0.85f;
+            if (shakeIntensity < 0.5f)
+            {
+                shakeIntensity = 0.0f;
+            }
+        }
+
         Rectangle playerTextureDest = {
             playerPos.x,
             playerPos.y,
-            128,
-            128
+            200,
+            200
         };
 
         Rectangle PlayerHitbox = GetPlayerHitbox(playerPos);
@@ -813,12 +887,14 @@ int main(void)
                         {
                             enemies[i].health -= 1;
                             bullets[j].active = 0;
+                            SpawnHitParticles(particles, bullets[j].position, 6);
 
                             if (enemies[i].health <= 0)
                             {
                                 enemies[i].health = 0;
                                 enemies[i].isSpawning = 0;
                                 enemies[i].isAttacking = 0;
+                                SpawnHitParticles(particles, enemies[i].position, 10);
                                 PlaySound(enemyDeath);
                             }
 
@@ -854,6 +930,17 @@ int main(void)
         BeginDrawing();
 
         ClearBackground(DARKGRAY);
+
+        Camera2D camera = { 0 };
+        camera.target = (Vector2){ 0, 0 };
+        camera.offset = (Vector2){
+            (shakeIntensity > 0.5f) ? GetRandomValue(-(int)shakeIntensity, (int)shakeIntensity) : 0,
+            (shakeIntensity > 0.5f) ? GetRandomValue(-(int)shakeIntensity, (int)shakeIntensity) : 0
+        };
+        camera.rotation = 0;
+        camera.zoom = 1.0f;
+        BeginMode2D(camera);
+
         DrawTexture(backgroundTexture, 0, 0, WHITE);
 
         if (!IsAudioDeviceReady())
@@ -1019,6 +1106,19 @@ int main(void)
                 DrawText("Press T to reset", 285, 235, 24, YELLOW);
             } break;
         }
+
+        for (int i = 0; i < MAX_PARTICLES; i++)
+        {
+            if (particles[i].active)
+            {
+                float alpha = particles[i].lifetime / particles[i].maxLifetime;
+                Color c = particles[i].color;
+                c.a = (unsigned char)(alpha * 255);
+                DrawCircleV(particles[i].position, particles[i].radius * alpha, c);
+            }
+        }
+
+        EndMode2D();
 
         DrawText(TextFormat("Bullets: %d", bulletCount), 10, 10, 20, WHITE);
         DrawText(TextFormat("Health: %d", playerHealth), 10, 35, 20, WHITE);
